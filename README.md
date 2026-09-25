@@ -1,80 +1,116 @@
-# INVESTIGATION 001: Secret Knowledge Base (v3.0)
+# INVESTIGATION 001: Secret Knowledge Base (v3.1)
 
-## 1. Player Registration and Profile
-
-Before the investigation begins, the game identifies the user:
-
-* **Sign In / Registration:** The player enters their name or nickname (or uses the current profile).
-* **Progress Saving:** The system tracks player statistics:
-  * Number of successfully completed cases.
-  * Difficulty level chosen by the analyst (*Novice*, *Investigator*, *Chief Analyst*).
-  * Total score and rating.
+Веброзслідування у стилі ретро-термінала. Гравець — аналітик кіберкорпорації, що доводить гіпотези методом резолюції пропозиційної логіки на основі бази знань конкретної справи.
 
 ---
 
-## 2. Gameplay and Campaign Structure
+## Запуск
 
-The player acts as an AI analyst for a cyber corporation investigating a server breach. The knowledge base (KB) consists of corporate security axioms, suspect testimonies, and system logs written as propositional logic formulas with human-readable explanations alongside them.
+```bash
+pip install -r requirements.txt
+python app.py
+```
 
-### Campaign Progression (Rounds)
+Сервер піднімається на `http://localhost:5001`. Відкрийте адресу в браузері — інтерфейс термінала завантажиться сам.
 
-* The campaign consists of a **series of rounds (cases)** — by default, a full cycle consists of **5 consecutive cases** of varying difficulty.
-* In each round, the player chooses the investigation mode: **"Proof"** or **"Breach"**.
-* **Successful completion of a round** is considered the correct proof of a hypothesis or the identification of a minimal inconsistency within a limited number of turns / without using penalty hints.
-* After completing all rounds, the game summarizes the final report (score, analyst efficiency).
-
----
-
-## 3. Game Modes
-
-### Mode A: "Proof" (Deductive Analysis)
-
-* **Objective:** Prove a specific hypothesis $H$ using deductive reasoning.
-* **Briefing:** The game outputs the KB as a numbered list of formulas with explanations. Before the round starts, a consistency check (resolution on the KB) is performed so that the player always receives a consistent base.
-* **Player's Turn:** Entering hypothesis $H$ (e.g., a simple literal `B` or a complex formula `A & ~C -> B`).
-* **Processing:** The system adds $\neg H$ to the KB, reduces everything to CNF, and runs the resolution method (proof by contradiction).
-* **Verdict:**
-  * **Proved:** An empty clause was found for $KB \cup \{\neg H\}$. The *Derivation Tree* is shown.
-  * **Refuted:** An empty clause was found for $KB \cup \{H\}$.
-  * **Undetermined:** Resolution exhausted in both cases, meaning the KB says nothing about $H$.
-
-### Mode B: "Breach" (Falsification Search)
-
-* **Objective:** Find a minimal inconsistent subset of statements in a deliberately inconsistent base (a set that is incompatible together, but becomes consistent after removing any single element).
-* **Verdict:** If the set is minimal and inconsistent, the case is solved. If extra statements are named or the set is consistent, the game asks to try again.
+> `index.html` має лежати в папці `templates/` поруч з `app.py` (вимога Flask `render_template`), інакше головна сторінка поверне помилку 500.
 
 ---
 
-## 4. Difficulty Levels and Progression
+## Як грати
 
-| Difficulty Level | Variables in KB | Features and Constraints |
-| :--- | :---: | :--- |
-| **Novice** | 3–4 | One short derivation chain, unlimited hints. |
-| **Investigator** | 5–6 | Multiple derivation paths, limited number of hints. |
-| **Chief Analyst** | 7–8 | "False tracks" (relevant but consistent non-relevant statements). No hints. |
-
----
-
-## 5. Formula Input Syntax
-
-| Symbol | Meaning | Example |
-| :---: | :--- | :--- |
-| `~` | NOT (negation) | `~A` |
-| `&` | AND (conjunction) | `A & B` |
-| `v` | OR (disjunction) | `A v B` |
-| `->` | Implication | `B -> S` |
-| `<->` | Equivalence | `A <-> B` |
-| `( )` | Grouping | `(A v B) -> C` |
-
-*Variables are specified in uppercase letters (A, B, S, V). The legend is displayed in the briefing.*
+1. **Вхід.** Введіть ім'я, потім пароль.
+   - Якщо профіль новий — пароль зберігається (SHA-256), профіль створюється.
+   - Якщо профіль існує — пароль звіряється з хешем.
+   - **3 невдалі спроби поспіль → термінал блокується назавжди** (до перезапуску сервера). Будьте уважні з паролем.
+2. Введіть `start`, щоб побачити меню поточної справи.
+3. У меню:
+   - `1` — опис справи та легенда змінних;
+   - `2` — база знань (аксіоми) у формі пропозиційної логіки;
+   - `3` — ввести гіпотезу для перевірки (наприклад `~V` або `A & ~C -> B`);
+   - `4` — дерево виведення останньої перевіреної гіпотези;
+   - `5` — обрати рівень складності наступної справи (доступно лише з рангу Middle Investigator і вище);
+   - `6` — зберегти прогрес і завершити сеанс.
+4. Гра додає заперечення вашої гіпотези до бази знань і шукає суперечність методом резолюції. Якщо знайдено порожню клаузу — гіпотеза доведена.
 
 ---
 
-## 6. Interaction Menu (CLI)
+## Ранги та прогрес
 
-1. View player profile and round statistics
-2. View the list of statements (axioms and testimonies of the current case)
-3. Propose a hypothesis / name suspected statements
-4. Request a hint (comparison pair / unpaired literals)
-5. Show derivation tree of the previous hypothesis
-6. End investigation (return to main menu)
+Ранг обчислюється автоматично з кількості доведених гіпотез:
+
+| Ранг | Умова | Доступні рівні складності |
+|---|---|---|
+| Junior Investigator | `solved_count < 5` | лише стартова / автогенерована базова справа |
+| Middle Investigator | `5 ≤ solved_count < 10` | Junior, Middle |
+| Senior Investigator | `solved_count ≥ 10` | Junior, Middle, Senior |
+
+За кожне успішне доведення: `+10` балів, `solved_count + 1`. Прогрес зберігається в `data/players.json`.
+
+> Для рангу Junior нова справа після успіху видається не одразу в меню, а при повторному вході (вийдіть і зайдіть знову тим самим ім'ям та паролем).
+
+---
+
+## Справи
+
+Стартова справа (`СПРАВА 001: НІЧНИЙ ІНЦИДЕНТ У СЕРВЕРНІЙ`, `data/cases.json`) видається лише гравцям без жодної розв'язаної справи. Усі наступні справи генеруються процедурно (`case_generator.py`):
+
+- випадкові персонажі та події (хтось підключив флешку, скопіював базу, відкрив двері, тощо);
+- прихована узгоджена «модель світу» гарантує, що база знань завжди несуперечлива, а гіпотеза завжди доводна;
+- складність визначає кількість змінних, довжину ланцюжка виведення і наявність «хибних слідів» — правдивих, але не потрібних для доведення тверджень:
+
+| Рівень | Змінних | Хибних слідів |
+|---|---|---|
+| Junior Investigator | 4 | 0 |
+| Middle Investigator | 6 | 1 |
+| Senior Investigator | 8 | 3 |
+
+---
+
+## Синтаксис формул
+
+| Запис | Значення |
+|---|---|
+| `~` | НЕ |
+| `&` | І |
+| `v` | АБО |
+| `->` | Імплікація |
+| `<->` | Еквівалентність |
+| `( )` | Групування |
+
+Змінні — великі латинські літери, за потреби з цифрами (`A`, `B`, `A1`).
+
+---
+
+## Структура проєкту
+
+```
+Investigation001/
+├── app.py                # Flask-сервер, весь ігровий цикл і API
+├── case_generator.py     # процедурна генерація справ
+├── cases.py              # завантаження стартової справи з cases.json
+├── game.py               # GameSession: підготовка бази знань, перевірка гіпотези
+├── player.py             # профіль, пароль, ранг
+├── logic/
+│   ├── models.py         # Literal, Clause, вузли формули
+│   ├── parser.py         # рядок → формула
+│   ├── cnf.py            # формула → КНФ → клаузи
+│   └── resolution.py     # метод резолюції, дерево виведення
+├── templates/
+│   └── index.html        # клієнтський термінал
+└── data/
+    ├── cases.json        # стартова справа
+    └── players.json      # профілі гравців (паролі зберігаються як хеш)
+```
+
+`main.py` і `cli.py` — рання консольна версія гри, залишена в репозиторії, але не використовується вебсервером.
+
+---
+
+## Відомі обмеження
+
+- Реалізований лише режим доведення гіпотези. Режим пошуку мінімальної суперечності («Злам») ще не підключений до гри, хоча логіка (`is_minimal_inconsistent` у `logic/resolution.py`) вже готова.
+- Підказок під час гри немає.
+- Немає фіксованої кампанії з N справ і підсумкового звіту — гра триває, поки гравець підвищує ранг.
+- Блокування після 3 невдалих спроб входу знімається лише перезапуском сервера.
+- Стан активної сесії (`active_sessions`) зберігається в пам'яті процесу і губиться при перезапуску сервера; профіль (`players.json`) зберігається окремо і не втрачається.

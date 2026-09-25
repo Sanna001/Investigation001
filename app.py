@@ -65,37 +65,40 @@ def handle_command():
             if not cmd:
                 return jsonify({"result": "\n[ПОМИЛКА]: Ім'я не може бути порожнім. Спробуйте ще раз:"})
 
-            if cmd in locked_usernames:
+            if cmd.lower() in [u.lower() for u in locked_usernames]:
                 return jsonify({
                     "result": "\n[АКТИВНИЙ ЗАХИСТ]: Доступ для цього користувача заблоковано через загрозу безпеці!",
                     "locked": True
                 })
 
-            existing_profile = player_manager.load_profile(cmd)
-            user_exists = bool(existing_profile.password_hash)
+            user_exists = player_manager.exists(cmd)
 
             if sess["mode"] == "LOGIN":
                 if not user_exists:
                     return jsonify({
-                        "result": f"\n[ПОМИЛКА ВХОДУ]: Користувача з ім'ям '{cmd}' не існує!\nВведіть існуюче ім'я (або перезавантажте термінал для реєстрації):",
+                        "result": f"\n[ПОМИЛКА ВХОДУ]: Користувача з ім'ям '{cmd}' не знайдено!\nПеревірте ім'я та спробуйте ще раз (або оновіть сторінку для реєстрації):",
                         "step": "ASK_USERNAME"
                     })
-                sess["username"] = cmd
-                sess["profile"] = existing_profile
+                
+                real_name = player_manager.get_real_name(cmd)
+                sess["username"] = real_name
+                sess["profile"] = player_manager.load_profile(real_name)
                 sess["state"] = "ASK_PASSWORD"
                 return jsonify({
-                    "result": f"\n[АВТОРИЗАЦІЯ]: Користувача '{cmd}' знайдено.\nВведіть пароль доступу:",
+                    "result": f"\n[АВТОРИЗАЦІЯ]: Користувача '{real_name}' знайдено.\nВведіть пароль доступу:",
                     "step": "ASK_PASSWORD"
                 })
 
             elif sess["mode"] == "REGISTER":
                 if user_exists:
+                    real_name = player_manager.get_real_name(cmd)
                     return jsonify({
-                        "result": f"\n[ПОМИЛКА РЕЄСТРАЦІЇ]: Ім'я '{cmd}' вже зайняте іншим розслідувачем!\nВведіть інше бажане ім'я:",
+                        "result": f"\n[ПОМИЛКА РЕЄСТРАЦІЇ]: Ім'я '{real_name}' вже зайняте іншим розслідувачем!\nВведіть інше бажане ім'я:",
                         "step": "ASK_USERNAME"
                     })
+                
                 sess["username"] = cmd
-                sess["profile"] = existing_profile  # Порожній новий профіль
+                sess["profile"] = PlayerProfile(name=cmd)
                 sess["state"] = "ASK_PASSWORD"
                 return jsonify({
                     "result": f"\n[РЕЄСТРАЦІЯ]: Ім'я '{cmd}' вільне.\nПридумайте та введіть новий пароль:",
@@ -108,7 +111,6 @@ def handle_command():
             profile: PlayerProfile = sess["profile"]
 
             if sess["mode"] == "REGISTER":
-                # Встановлюємо новий пароль для реєстрації
                 profile.password_hash = hash_password(cmd)
                 player_manager.save_profile(profile)
 
@@ -121,7 +123,7 @@ def handle_command():
                 sess["state"] = "MENU"
 
                 return jsonify({
-                    "result": f"\n[РЕЄСТРАЦІЯ УСПІШНА]: Акаунт '{username}' успішно створено!\nВведіть команду 'start' для перегляду меню справи.",
+                    "result": f"\n[РЕЄСТРАЦІЯ УСПІШНА]: Акаунт '{username}' успішно створено та збережено!\nВведіть команду 'start' для перегляду меню справи.",
                     "rank": profile.get_rank(),
                     "score": profile.total_score,
                     "name": profile.name,
@@ -129,7 +131,6 @@ def handle_command():
                 })
 
             elif sess["mode"] == "LOGIN":
-                # Перевіряємо пароль для входу
                 if profile.password_hash == hash_password(cmd):
                     sess["password_attempts"] = 0
                     try:
@@ -203,10 +204,14 @@ def handle_command():
                     profile.solved_count += 1
                     profile.total_score += 10
                     profile.current_level = profile.get_rank()
+                    
+                    # Обов'язкове оновлення в JSON
                     player_manager.save_profile(profile)
+                    
                     response_text = (
                         f"\n[УСПІХ!]: Гіпотезу успішно ДОВЕДЕНО методом резолюції!\n"
                         f"Оновлені бали: {profile.total_score} | Ранг: {profile.get_rank()}\n"
+                        f"Дані успішно збережено в базі.\n"
                         f"Введіть 'start' у головному меню, щоб продовжити."
                     )
                 else:

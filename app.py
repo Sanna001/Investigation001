@@ -114,6 +114,7 @@ def handle_command():
                 profile.password_hash = hash_password(cmd)
                 player_manager.save_profile(profile)
 
+                # ДЛЯ НОВИХ КОРИСТУВАЧІВ ЗАВЖДИ ВИДАЄМО СТАРТОВУ СПРАВУ 001 З JSON
                 try:
                     case_data = case_loader.get_starter_case(0)
                 except Exception:
@@ -133,9 +134,14 @@ def handle_command():
             elif sess["mode"] == "LOGIN":
                 if profile.password_hash == hash_password(cmd):
                     sess["password_attempts"] = 0
-                    try:
-                        case_data = case_loader.get_starter_case(profile.solved_count)
-                    except ValueError:
+
+                    # ЯКЩО solved_count == 0 -> СПРАВА 001 З JSON, ІНАКШЕ -> ГЕНЕРУЄМО НОВУ
+                    if profile.solved_count == 0:
+                        try:
+                            case_data = case_loader.get_starter_case(0)
+                        except Exception:
+                            case_data = generate_case(profile.get_rank())
+                    else:
                         case_data = generate_case(profile.get_rank())
 
                     sess["session"] = GameSession(profile, case_data)
@@ -205,14 +211,17 @@ def handle_command():
                     profile.total_score += 10
                     profile.current_level = profile.get_rank()
                     
-                    # Обов'язкове оновлення в JSON
+                    # Обов'язкове збереження прогресу
                     player_manager.save_profile(profile)
+                    
+                    # Після успішного розв'язання підвантажуємо нову згенеровану справу для наступного раунду
+                    sess["session"] = GameSession(profile, generate_case(profile.get_rank()))
                     
                     response_text = (
                         f"\n[УСПІХ!]: Гіпотезу успішно ДОВЕДЕНО методом резолюції!\n"
                         f"Оновлені бали: {profile.total_score} | Ранг: {profile.get_rank()}\n"
-                        f"Дані успішно збережено в базі.\n"
-                        f"Введіть 'start' у головному меню, щоб продовжити."
+                        f"Дані збережено. Нову справу підготовлено!\n"
+                        f"Введіть 'start' у головному меню, щоб перейти до нової справи."
                     )
                 else:
                     session.attempts_left -= 1
@@ -262,7 +271,7 @@ def handle_command():
             response_text = f"\n--- БАЗА ЗНАНЬ (АКСІОМИ) ---\n{axioms_str}"
         elif cmd == "3":
             sess["state"] = "WAITING_HYPOTHESIS"
-            response_text = f"\nСпроб залишилось у цій сесії: {session.attempts_left}\nВведіть гіпотезу для перевірки (напр. ~C або C):"
+            response_text = f"\nСпроб залишилось у цій сесії: {session.attempts_left}\nВведіть гіпотезу для перевірки (напр. ~V або V):"
         elif cmd == "4":
             tree = sess.get("last_tree")
             if not tree or not tree.steps:

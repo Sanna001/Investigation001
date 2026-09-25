@@ -114,11 +114,8 @@ def handle_command():
                 profile.password_hash = hash_password(cmd)
                 player_manager.save_profile(profile)
 
-                # ДЛЯ НОВИХ КОРИСТУВАЧІВ ЗАВЖДИ ВИДАЄМО СТАРТОВУ СПРАВУ 001 З JSON
-                try:
-                    case_data = case_loader.get_starter_case(0)
-                except Exception:
-                    case_data = generate_case("Junior Investigator")
+                # ДЛЯ НОВОГО КОРИСТУВАЧА ЗАВЖДИ БЕРЕМО СПРАВУ 001 З JSON
+                case_data = case_loader.get_starter_case(profile.solved_count)
 
                 sess["session"] = GameSession(profile, case_data)
                 sess["state"] = "MENU"
@@ -137,10 +134,7 @@ def handle_command():
 
                     # ЯКЩО solved_count == 0 -> СПРАВА 001 З JSON, ІНАКШЕ -> ГЕНЕРУЄМО НОВУ
                     if profile.solved_count == 0:
-                        try:
-                            case_data = case_loader.get_starter_case(0)
-                        except Exception:
-                            case_data = generate_case(profile.get_rank())
+                        case_data = case_loader.get_starter_case(0)
                     else:
                         case_data = generate_case(profile.get_rank())
 
@@ -211,10 +205,10 @@ def handle_command():
                     profile.total_score += 10
                     profile.current_level = profile.get_rank()
                     
-                    # Обов'язкове збереження прогресу
+                    # Збереження оновленого профілю
                     player_manager.save_profile(profile)
                     
-                    # Після успішного розв'язання підвантажуємо нову згенеровану справу для наступного раунду
+                    # Лише ПІСЛЯ першої розв'язаної справи (solved_count >= 1) переходимо до процедурної генерації
                     sess["session"] = GameSession(profile, generate_case(profile.get_rank()))
                     
                     response_text = (

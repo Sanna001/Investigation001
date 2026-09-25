@@ -2,49 +2,76 @@ import json
 import os
 from typing import Dict, List, Any
 
-class CaseLoader:
-    def __init__(self, filepath: str = "cases.json"):
-        # Якщо за першим шляхом немає, перевіряємо data/cases.json або відносні шляхи
-        if not os.path.exists(filepath):
-            possible_paths = [
-                "data/cases.json",
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), "cases.json"),
-                os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "cases.json")
-            ]
-            for p in possible_paths:
-                if os.path.exists(p):
-                    filepath = p
-                    break
+# Резервна СПРАВА 001 на випадок, якщо файл на сервері взагалі відсутній
+HARDCODED_STARTER_CASE = {
+    "id": 404,
+    "title": "СПРАВА 001: НІЧНИЙ ІНЦИДЕНТ У СЕРВЕРНІЙ",
+    "mode": "Доведення",
+    "level": "Junior Investigator",
+    "description": "О 03:00 ночі в головному дата-центрі спрацювала сирена. У цей час там перебували співробітники: системний адміністратор Віктор, нічний черговий Андрій та стажер Богдан. Віктор стверджує, що міцно спав і нічого не чув. Проаналізувавши свідчення та логи безпеки, доведіть за допомогою логіки, чи справді Віктор спав.",
+    "legend": {
+        "A": "Андрій був у серверній о 03:00",
+        "B": "Богдан відкривав двері службовим ключем о 03:01",
+        "S": "Сигналізація в дата-центрі була активована",
+        "V": "Віктор спав на своєму робочому місці"
+    },
+    "axioms": [
+        "(A v B)",
+        "(B -> S)",
+        "(S -> ~V)",
+        "~A"
+    ],
+    "target_hypothesis": "~V"
+}
 
-        self.filepath = filepath
+class CaseLoader:
+    def __init__(self, filename: str = "cases.json"):
+        # Визначаємо абсолютний шлях до кореневої папки проєкту відносно цього файлу cases.py
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        possible_paths = [
+            os.path.join(base_dir, filename),
+            os.path.join(base_dir, "data", filename),
+            os.path.join(os.getcwd(), filename),
+            os.path.join(os.getcwd(), "data", filename),
+            filename
+        ]
+        
+        self.filepath = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                self.filepath = path
+                break
+
         self._cases_cache = self._load_cases()
 
     def _load_cases(self) -> List[Dict[str, Any]]:
-        if not os.path.exists(self.filepath):
-            print(f"[ERROR] CaseLoader: Файл '{self.filepath}' не знайдено!")
-            return []
+        if not self.filepath or not os.path.exists(self.filepath):
+            print("[WARNING] CaseLoader: Файл cases.json не знайдено на диску! Використовуємо резервну СПРАВУ 001.")
+            return [HARDCODED_STARTER_CASE]
         try:
             with open(self.filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data.get("cases", [])
-        except (json.JSONDecodeError, OSError) as e:
-            print(f"[ERROR] CaseLoader помилка читання: {e}")
-            return []
+                cases = data.get("cases", [])
+                return cases if cases else [HARDCODED_STARTER_CASE]
+        except Exception as e:
+            print(f"[ERROR] CaseLoader помилка читання JSON: {e}")
+            return [HARDCODED_STARTER_CASE]
 
     def get_case_by_id(self, case_id: int) -> Dict[str, Any]:
         for c in self._cases_cache:
             if c.get("id") == case_id:
                 return c
-        raise ValueError(f"Справу з ID {case_id} не знайдено.")
+        return HARDCODED_STARTER_CASE
 
     def get_starter_case(self, solved_count: int) -> Dict[str, Any]:
         """
-        Повертає стартову справу (ID 404 / СПРАВА 001) з json-файлу для новачків.
+        Повертає стартову справу (СПРАВА 001) для новачків.
         """
         if solved_count == 0:
             if self._cases_cache:
                 return self._cases_cache[0]
-            raise RuntimeError(f"Файл {self.filepath} порожній або не завантажився!")
+            return HARDCODED_STARTER_CASE
         raise ValueError("Стартова справа доступна лише для гравців із 0 розв'язаних справ.")
 
     def get_cases_by_level(self, level: str) -> List[Dict[str, Any]]:

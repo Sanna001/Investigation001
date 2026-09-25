@@ -1,114 +1,212 @@
-<script>
-    const inputField = document.getElementById('commandInput');
-    const outputDiv = document.getElementById('output');
-    let currentUsername = "";
-    let step = "ASK_NAME";
-    let isLocked = false;
-
-    function formatOutput(text) {
-        if (!text) return "";
-        if (text.includes("[УСПІХ!]") || text.includes("[АВТОРИЗАЦІЯ УСПІШНА]") || text.includes("[РЕЄСТРАЦІЯ УСПІШНА]")) {
-            return `<span class="success-text">${text}</span>`;
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>ОПЕРАТИВНИЙ ТЕРМІНАЛ // SECURE ACCESS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f0e;
+            --terminal-border: #1f3b30;
+            --primary-glow: #00ff66;
+            --text-dim: #4da674;
+            --accent-gold: #ffb700;       
+            --input-muted: #b89742;       
+            --alert-red: #ff3333;
         }
-        if (text.includes("[ПОМИЛКА]") || 
-            text.includes("[ПОПЕРЕДЖЕННЯ") || 
-            text.includes("[ВІДМОВА]") || 
-            text.includes("[УВАГА]") || 
-            text.includes("[ДОСТУП ОБМЕЖЕНО]") || 
-            text.includes("[КРИТИЧНА ТРИВОГА]") ||
-            text.includes("[АКТИВНИЙ ЗАХИСТ]")) {
-            return `<span class="error-text">${text}</span>`;
+        body {
+            background-color: var(--bg-color);
+            color: var(--primary-glow);
+            font-family: 'Share Tech Mono', monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
         }
-        if (text.includes("МЕНЮ РОЗСЛІДУВАННЯ") || 
-            text.includes("ОБЕРІТЬ РІВЕНЬ СКЛАДНОСТІ") || 
-            text.includes("[РЕЄСТРАЦІЯ]:") || 
-            text.includes("[НОВИЙ КОРИСТУВАЧ]:") || 
-            text.includes("[АВТОРИЗАЦІЯ]:") || 
-            text.includes("ЗАКРИТИЙ КАНАЛ ЗВ'ЯЗКУ") ||
-            /^=+$/.test(text.trim())) {
-            return `<span class="accent-text">${text}</span>`;
+        .terminal-container {
+            width: 900px;
+            height: 650px;
+            background: rgba(10, 15, 12, 0.95);
+            border: 2px solid var(--terminal-border);
+            box-shadow: 0 0 25px rgba(0, 255, 102, 0.15), inset 0 0 15px rgba(0, 255, 102, 0.05);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            position: relative;
         }
-        return `<span class="info-text">${text}</span>`;
-    }
-
-    inputField.addEventListener('keydown', async function(event) {
-        if (isLocked) {
-            event.preventDefault();
-            return;
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px dashed var(--terminal-border);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            letter-spacing: 1px;
         }
+        .terminal-header span { color: var(--accent-gold); }
+        .terminal-output {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            padding-right: 10px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
+        }
+        .terminal-input-line {
+            display: flex;
+            align-items: center;
+            border-top: 1px solid var(--terminal-border);
+            padding-top: 12px;
+        }
+        .prompt-symbol {
+            color: var(--accent-gold);
+            margin-right: 10px;
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(255, 183, 0, 0.5);
+        }
+        .error-text { color: var(--alert-red); text-shadow: 0 0 8px rgba(255, 51, 51, 0.5); }
+        .success-text { color: var(--primary-glow); text-shadow: 0 0 8px rgba(0, 255, 102, 0.6); }
+        .accent-text { color: var(--accent-gold); text-shadow: 0 0 8px rgba(255, 183, 0, 0.4); }
+        .user-input-text { color: var(--input-muted); text-shadow: 0 0 6px rgba(184, 151, 66, 0.3); }
+        .info-text { color: #5ab37d; text-shadow: 0 0 5px rgba(90, 179, 125, 0.2); }
+        input {
+            background: transparent;
+            border: none;
+            color: var(--input-muted); 
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 1.1rem;
+            outline: none;
+            width: 100%;
+            text-shadow: 0 0 6px rgba(184, 151, 66, 0.3);
+        }
+        input:disabled {
+            color: var(--alert-red);
+            text-shadow: 0 0 5px rgba(255, 51, 51, 0.5);
+            cursor: not-allowed;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: var(--terminal-border); border-radius: 3px; }
+    </style>
+</head>
+<body>
 
-        if (event.key === 'Enter') {
-            const val = inputField.value.trim();
-            if (!val) return;
+    <div class="terminal-container">
+        <div class="terminal-header">
+            <div>РАНГ: <span id="op-rank">---</span></div>
+            <div>БАЛИ: <span id="op-score">---</span></div>
+            <div>РОЗСЛІДУВАЧ: <span id="op-name">---</span></div>
+        </div>
 
-            if (step === "ASK_PASSWORD") {
-                outputDiv.innerHTML += `\n<span class="user-input-text">> ********</span>\n`;
-            } else {
-                outputDiv.innerHTML += `\n<span class="user-input-text">> ${val}</span>\n`;
+        <div class="terminal-output" id="output"><span class="accent-text">============================================================
+  ЗАКРИТИЙ КАНАЛ ЗВ'ЯЗКУ // СЕКРЕТНИЙ ТЕРМІНАЛ
+============================================================
+ ВІТАЄМО В СИСТЕМІ АВТОРИЗАЦІЇ!
+ 1. Вхід (Sign In)
+ 2. Реєстрація (Sign Up)
+------------------------------------------------------------
+ Оберіть дію (1 або 2):</span></div>
+
+        <div class="terminal-input-line">
+            <span class="prompt-symbol">></span>
+            <input type="text" id="commandInput" autofocus placeholder="Введіть 1 або 2...">
+        </div>
+    </div>
+
+    <script>
+        const inputField = document.getElementById('commandInput');
+        const outputDiv = document.getElementById('output');
+        const sessionId = "sess_" + Math.random().toString(36).substring(2, 9);
+        let currentStep = "ASK_MODE";
+        let isLocked = false;
+
+        function formatOutput(text) {
+            if (!text) return "";
+            if (text.includes("[УСПІХ!]") || text.includes("[ВХІД УСПІШНИЙ]") || text.includes("[РЕЄСТРАЦІЯ УСПІШНА]")) {
+                return `<span class="success-text">${text}</span>`;
             }
-            
-            inputField.value = '';
+            if (text.includes("[ПОМИЛКА]") || 
+                text.includes("[ПОПЕРЕДЖЕННЯ") || 
+                text.includes("[ВІДМОВА]") || 
+                text.includes("[УВАГА]") || 
+                text.includes("[ДОСТУП ОБМЕЖЕНО]") || 
+                text.includes("[КРИТИЧНА ТРИВОГА]") ||
+                text.includes("[АКТИВНИЙ ЗАХИСТ]")) {
+                return `<span class="error-text">${text}</span>`;
+            }
+            if (text.includes("МЕНЮ РОЗСЛІДУВАННЯ") || 
+                text.includes("ОБЕРІТЬ РІВЕНЬ СКЛАДНОСТІ") || 
+                text.includes("[РЕЄСТРАЦІЯ]:") || 
+                text.includes("[РЕЖИМ") || 
+                text.includes("[АВТОРИЗАЦІЯ]:") || 
+                text.includes("ЗАКРИТИЙ КАНАЛ ЗВ'ЯЗКУ") ||
+                /^=+$/.test(text.trim())) {
+                return `<span class="accent-text">${text}</span>`;
+            }
+            return `<span class="info-text">${text}</span>`;
+        }
 
-            try {
-                // Якщо ми тільки запитуємо ім'я
-                if (step === "ASK_NAME") {
-                    currentUsername = val;
-                    document.getElementById('op-name').innerText = currentUsername;
+        inputField.addEventListener('keydown', async function(event) {
+            if (isLocked) {
+                event.preventDefault();
+                return;
+            }
 
+            if (event.key === 'Enter') {
+                const val = inputField.value.trim();
+                if (!val) return;
+
+                if (currentStep === "ASK_PASSWORD") {
+                    outputDiv.innerHTML += `\n<span class="user-input-text">> ********</span>\n`;
+                } else {
+                    outputDiv.innerHTML += `\n<span class="user-input-text">> ${val}</span>\n`;
+                }
+                
+                inputField.value = '';
+
+                try {
                     const response = await fetch('/api/command', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ command: "", username: currentUsername })
+                        body: JSON.stringify({ command: val, session_id: sessionId })
                     });
-                    
+
                     const data = await response.json();
                     outputDiv.innerHTML += formatOutput(data.result) + "\n";
 
-                    inputField.type = "password";
-                    step = "ASK_PASSWORD";
-                    outputDiv.scrollTop = outputDiv.scrollHeight;
-                    return;
+                    if (data.step) currentStep = data.step;
+                    
+                    if (currentStep === "ASK_PASSWORD") {
+                        inputField.type = "password";
+                    } else {
+                        inputField.type = "text";
+                    }
+
+                    if (data.name) document.getElementById('op-name').innerText = data.name;
+                    if (data.rank) document.getElementById('op-rank').innerText = data.rank;
+                    if (data.score !== undefined) document.getElementById('op-score').innerText = data.score;
+
+                    if (data.locked) {
+                        isLocked = true;
+                        inputField.disabled = true;
+                        inputField.placeholder = "ТЕРМІНАЛ ЗАБЛОКОВАНО";
+                        document.querySelector('.prompt-symbol').style.color = '#ff3333';
+                    }
+
+                } catch (err) {
+                    outputDiv.innerHTML += `<span class="error-text">\n[ПОМИЛКА МЕРЕЖІ]: ${err.message}\n</span>`;
                 }
 
-                // Звичайне надсилання команд/паролів
-                const response = await fetch('/api/command', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: val, username: currentUsername })
-                });
-
-                if (!response.ok) {
-                    const errData = await response.json().catch(() => ({ result: "[ПОМИЛКА СЕРВЕРА]: Помилка відповіді" }));
-                    outputDiv.innerHTML += formatOutput(errData.result || "\n[ПОМИЛКА СЕРВЕРА]") + "\n";
-                    outputDiv.scrollTop = outputDiv.scrollHeight;
-                    return;
-                }
-
-                const data = await response.json();
-                outputDiv.innerHTML += formatOutput(data.result) + "\n";
-                
-                if (data.rank) document.getElementById('op-rank').innerText = data.rank;
-                if (data.score !== undefined) document.getElementById('op-score').innerText = data.score;
-
-                if (data.locked) {
-                    isLocked = true;
-                    inputField.disabled = true;
-                    inputField.placeholder = "ТЕРМІНАЛ ЗАБЛОКОВАНО КРИТИЧНОЮ ТРИВОГОЮ";
-                    document.querySelector('.prompt-symbol').style.color = '#ff3333';
-                    outputDiv.scrollTop = outputDiv.scrollHeight;
-                    return;
-                }
-
-                if (step === "ASK_PASSWORD" && (data.result.includes("УСПІШНА") || data.result.includes("успішно"))) {
-                    inputField.type = "text";
-                    step = "PLAYING";
-                }
-
-            } catch (err) {
-                outputDiv.innerHTML += `<span class="error-text">\n[ПОМИЛКА МЕРЕЖІ ТА СЕРВЕРА]: ${err.message}\n</span>`;
+                outputDiv.scrollTop = outputDiv.scrollHeight;
             }
-
-            outputDiv.scrollTop = outputDiv.scrollHeight;
-        }
-    });
-</script>
+        });
+    </script>
+</body>
+</html>

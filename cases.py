@@ -2,7 +2,6 @@ import json
 import os
 from typing import Dict, List, Any
 
-# Резервна СПРАВА 001 на випадок, якщо файл на сервері взагалі відсутній
 HARDCODED_STARTER_CASE = {
     "id": 404,
     "title": "СПРАВА 001: НІЧНИЙ ІНЦИДЕНТ У СЕРВЕРНІЙ",
@@ -26,7 +25,6 @@ HARDCODED_STARTER_CASE = {
 
 class CaseLoader:
     def __init__(self, filename: str = "cases.json"):
-        # Визначаємо абсолютний шлях до кореневої папки проєкту відносно цього файлу cases.py
         base_dir = os.path.dirname(os.path.abspath(__file__))
         
         possible_paths = [

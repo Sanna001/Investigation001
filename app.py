@@ -8,13 +8,11 @@ from database import init_db
 
 app = Flask(__name__)
 
-# Автоматичне створення таблиць у базі даних при запуску
 init_db()
 
 player_manager = PlayerManager()
 case_loader = CaseLoader()
 
-# Сесії активних підключень за ID сесії / IP
 active_sessions = {}
 locked_usernames = set()
 
@@ -29,11 +27,10 @@ def handle_command():
         cmd = data.get("command", "").strip()
         session_id = data.get("session_id", "default_session")
 
-        # Ініціалізація нової сесії підключення
         if session_id not in active_sessions:
             active_sessions[session_id] = {
-                "state": "ASK_MODE",  # ASK_MODE, ASK_USERNAME, CONFIRM_REGISTER_SWITCH, ASK_PASSWORD, MENU, WAITING_*
-                "mode": None,          # 'LOGIN' або 'REGISTER'
+                "state": "ASK_MODE",  
+                "mode": None,          
                 "username": "",
                 "password_attempts": 0,
                 "profile": None,
@@ -43,7 +40,6 @@ def handle_command():
         sess = active_sessions[session_id]
         state = sess["state"]
 
-        # КРОК 1: Вибір режиму (Вхід або Реєстрація)
         if state == "ASK_MODE":
             if cmd == "1":
                 sess["mode"] = "LOGIN"
@@ -65,7 +61,6 @@ def handle_command():
                     "step": "ASK_MODE"
                 })
 
-        # КРОК 1.5: Підтвердження переходу до реєстрації, якщо акаунт не знайдено
         if state == "CONFIRM_REGISTER_SWITCH":
             if cmd in ["1", "так", "yes", "y"]:
                 sess["mode"] = "REGISTER"
@@ -87,7 +82,6 @@ def handle_command():
                     "step": "CONFIRM_REGISTER_SWITCH"
                 })
 
-        # КРОК 2: Введення та перевірка імені
         if state == "ASK_USERNAME":
             if not cmd:
                 return jsonify({"result": "\n[ПОМИЛКА]: Ім'я не може бути порожнім. Спробуйте ще раз:"})
@@ -134,7 +128,6 @@ def handle_command():
                     "step": "ASK_PASSWORD"
                 })
 
-        # КРОК 3: Введення та перевірка пароля
         if state == "ASK_PASSWORD":
             username = sess["username"]
             profile: PlayerProfile = sess["profile"]
@@ -143,7 +136,6 @@ def handle_command():
                 profile.password_hash = hash_password(cmd)
                 player_manager.save_profile(profile)
 
-                # ДЛЯ НОВОГО КОРИСТУВАЧА ЗАВЖДИ БЕРЕМО СПРАВУ 001З JSON
                 case_data = case_loader.get_starter_case(profile.solved_count)
 
                 sess["session"] = GameSession(profile, case_data)
@@ -193,7 +185,6 @@ def handle_command():
                             "step": "ASK_PASSWORD"
                         })
 
-        # ГРА / МЕНЮ СПРАВИ
         profile: PlayerProfile = sess["profile"]
         session: GameSession = sess["session"]
         rank = profile.get_rank()
@@ -324,6 +315,18 @@ def handle_command():
 
     except Exception as err:
         return jsonify({"result": f"\n[ПОМИЛКА СЕРВЕРА]: {str(err)}"}), 500
+
+@app.route("/admin/users")
+def list_users():
+    profiles = player_manager.list_all_profiles()
+    return jsonify([
+        {
+            "id": p.id,
+            "name": p.name,
+            "total_score": p.total_score,
+            "solved_count": p.solved_count
+        } for p in profiles
+    ])
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))

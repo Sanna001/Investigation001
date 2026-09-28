@@ -1,10 +1,15 @@
+import os
 from flask import Flask, render_template, request, jsonify
 from player import PlayerManager, PlayerProfile, hash_password
 from cases import CaseLoader
 from game import GameSession
 from case_generator import generate_case
+from database import init_db
 
 app = Flask(__name__)
+
+# Автоматичне створення таблиць у базі даних при запускe
+init_db()
 
 player_manager = PlayerManager()
 case_loader = CaseLoader()
@@ -205,7 +210,7 @@ def handle_command():
                     profile.total_score += 10
                     profile.current_level = profile.get_rank()
                     
-                    # Збереження оновленого профілю
+                    # Збереження оновленого профілю в БД
                     player_manager.save_profile(profile)
                     
                     # Лише ПІСЛЯ першої розв'язаної справи (solved_count >= 1) переходимо до процедурної генерації
@@ -299,7 +304,6 @@ def handle_command():
     except Exception as err:
         return jsonify({"result": f"\n[ПОМИЛКА СЕРВЕРА]: {str(err)}"}), 500
 
-import os
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port)

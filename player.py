@@ -1,6 +1,5 @@
-import json
-import os
 import hashlib
+from database import SessionLocal, PlayerModel
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -30,68 +29,65 @@ class PlayerProfile:
         }
 
 class PlayerManager:
-    def __init__(self, filename: str = "players.json"):
-        # Абсолютний шлях до папки, де лежить player.py
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Перевіряємо можливі розташування
-        possible_paths = [
-            os.path.join(base_dir, filename),
-            os.path.join(base_dir, "data", filename),
-            os.path.join(os.getcwd(), filename),
-            os.path.join(os.getcwd(), "data", filename)
-        ]
-        
-        self.filepath = possible_paths[0]
-        for p in possible_paths:
-            if os.path.exists(p):
-                self.filepath = p
-                break
-
-        self.players = self._load_all()
-
-    def _load_all(self) -> dict:
-        if not os.path.exists(self.filepath):
-            return {}
-        try:
-            with open(self.filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"[ERROR] Помилка зчитування {self.filepath}: {e}")
-            return {}
-
     def exists(self, username: str) -> bool:
-        return any(u.lower() == username.lower() for u in self.players.keys())
+        db = SessionLocal()
+        try:
+            player = db.query(PlayerModel).filter(PlayerModel.username.ilike(username)).first()
+            return player is not None
+        finally:
+            db.close()
 
     def get_real_name(self, username: str) -> str:
-        for u in self.players.keys():
-            if u.lower() == username.lower():
-                return u
-        return username
+        db = SessionLocal()
+        try:
+            player = db.query(PlayerModel).filter(PlayerModel.username.ilike(username)).first()
+            if player:
+                return player.name
+            return username
+        finally:
+            db.close()
 
     def load_profile(self, username: str) -> PlayerProfile:
-        real_name = self.get_real_name(username)
-        data = self.players.get(real_name)
-        if data:
-            return PlayerProfile(
-                name=data.get("name", real_name),
-                password_hash=data.get("password_hash", ""),
-                solved_count=data.get("solved_count", 0),
-                total_score=data.get("total_score", 0),
-                current_level=data.get("current_level", "Junior Investigator")
-            )
-        return PlayerProfile(name=username)
+        db = SessionLocal()
+        try:
+            player = db.query(PlayerModel).filter(PlayerModel.username.ilike(username)).first()
+            if player:
+                return PlayerProfile(
+                    name=player.name,
+                    password_hash=player.password_hash,
+                    solved_count=player.solved_count,
+                    total_score=player.total_score,
+                    current_level=player.current_level
+                )
+            return PlayerProfile(name=username)
+        finally:
+            db.close()
 
     def save_profile(self, profile: PlayerProfile):
-        # Оновлюємо внутрішній словник
-        self.players[profile.name] = profile.to_dict()
-        
-        # Записуємо з примусовим скиданням буфера на диск (flush + os.fsync)
+        db = SessionLocal()
         try:
-            with open(self.filepath, "w", encoding="utf-8") as f:
-                json.dump(self.players, f, ensure_ascii=False, indent=4)
-                f.flush()
-                os.fsync(f.fileno())
-            print(f"[SUCCESS] Профіль {profile.name} успішно збережено у {self.filepath}")
+            player = db.query(PlayerModel).filter(PlayerModel.username.ilike(profile.name)).first()
+            if not player:
+                player = PlayerModel(
+                    username=profile.name.lower(),
+                    name=profile.name,
+                    password_hash=profile.password_hash,
+                    solved_count=profile.solved_count,
+                    total_score=profile.total_score,
+                    current_level=profile.current_level
+                )
+                db.add(player)
+            else:
+                player.name = profile.name
+                player.password_hash = profile.password_hash
+                player.solved_count = profile.solved_count
+                player.total_score = profile.total_score
+                player.current_level = profile.current_level
+
+            db.commit()
+            print(f"[SUCCESS] Профіль {profile.name} успішно збережено у БД.")
         except Exception as e:
-            print(f"[ERROR] Не вдалося зберегти {self.filepath}: {e}")
+            db.rollback()
+            print(f"[ERROR] Помилка збереження профілю {profile.name} у БД: {e}")
+        finally:
+            db.close()

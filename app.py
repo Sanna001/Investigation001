@@ -1,5 +1,6 @@
 import os
 from flask import Flask, render_template, request, jsonify
+from typing import Set
 from player import PlayerManager, PlayerProfile, hash_password
 from cases import CaseLoader
 from game import GameSession
@@ -318,15 +319,18 @@ def handle_command():
 
 @app.route("/admin/users")
 def list_users():
-    profiles = player_manager.list_all_profiles()
-    return jsonify([
-        {
-            "id": p.id,
-            "name": p.name,
-            "total_score": p.total_score,
-            "solved_count": p.solved_count
-        } for p in profiles
-    ])
+    try:
+        profiles = player_manager.list_all_profiles()
+        result = []
+        for p in profiles:
+            result.append({
+                "id": getattr(p, "id", None),
+                "username": getattr(p, "name", getattr(p, "username", "N/A")),
+                "score": getattr(p, "total_score", getattr(p, "score", 0))
+            })
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))

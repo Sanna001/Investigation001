@@ -91,3 +91,11 @@ class PlayerManager:
             print(f"[ERROR] Помилка збереження профілю {profile.name} у БД: {e}")
         finally:
             db.close()
+
+    def get_all_players(self):
+        """Отримує список усіх гравців із бази даних."""
+        db = SessionLocal()
+        try:
+            return db.query(PlayerModel).all()
+        finally:
+            db.close()

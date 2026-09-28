@@ -320,18 +320,19 @@ def handle_command():
 @app.route("/admin/users")
 def list_users():
     try:
-        profiles = player_manager.list_all_profiles()
-        result = []
-        for p in profiles:
-            result.append({
-                "id": getattr(p, "id", None),
-                "username": getattr(p, "name", getattr(p, "username", "N/A")),
-                "score": getattr(p, "total_score", getattr(p, "score", 0))
-            })
+        players = player_manager.get_all_players()
+        result = [
+            {
+                "username": p.name,
+                "score": p.total_score,
+                "solved_count": p.solved_count,
+                "level": p.current_level
+            } for p in players
+        ]
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+    
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port)

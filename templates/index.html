@@ -6,18 +6,21 @@
     <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0b0f0e;
-            --terminal-border: #1f3b30;
-            --primary-glow: #00ff66;
-            --text-dim: #4da674;
-            --accent-gold: #ffb700;       
-            --input-muted: #b89742;       
-            --alert-red: #ff3333;
+            --bg-color: #2a0f10;
+            --bg-deep: #1f0b0c;
+            --grid-line: rgba(217, 210, 195, 0.06);
+            --grid-dot: rgba(217, 210, 195, 0.28);
+            --cream: #d9d2c3;
+            --cream-bright: #f0e9d8;
+            --cream-dim: #a39a88;
+            --cream-faint: #6e6357;
+            --rule: #7a6b5d;
         }
+        * { box-sizing: border-box; }
         body {
-            background-color: var(--bg-color);
-            color: var(--primary-glow);
-            font-family: 'Share Tech Mono', monospace;
+            background-color: var(--bg-deep);
+            color: var(--cream);
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
             margin: 0;
             padding: 20px;
             display: flex;
@@ -25,85 +28,126 @@
             align-items: center;
             height: 100vh;
             overflow: hidden;
-            background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-            background-size: 100% 4px;
         }
         .terminal-container {
             width: 900px;
+            max-width: 100%;
             height: 650px;
-            background: rgba(10, 15, 12, 0.95);
-            border: 2px solid var(--terminal-border);
-            box-shadow: 0 0 25px rgba(0, 255, 102, 0.15), inset 0 0 15px rgba(0, 255, 102, 0.05);
-            border-radius: 6px;
+            max-height: 100%;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(circle, var(--grid-dot) 1px, transparent 1.5px),
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 32px 32px, 32px 32px, 32px 32px;
+            background-position: 16px 16px, 0 0, 0 0;
+            border: 1px solid var(--rule);
+            border-radius: 18px;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 22px 26px;
             position: relative;
+            box-shadow: 0 0 0 6px var(--bg-deep), 0 0 0 7px var(--cream-faint);
+        }
+        .terminal-title {
+            text-align: center;
+            font-size: 1.9rem;
+            letter-spacing: 0.22em;
+            color: var(--cream-bright);
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--cream-dim);
+            margin-bottom: 12px;
+            text-shadow: 1px 0 0 rgba(240, 233, 216, 0.5);
         }
         .terminal-header {
             display: flex;
             justify-content: space-between;
-            border-bottom: 1px dashed var(--terminal-border);
-            padding-bottom: 10px;
-            margin-bottom: 15px;
-            font-size: 0.9rem;
-            color: var(--text-dim);
-            letter-spacing: 1px;
+            gap: 12px;
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            color: var(--cream-dim);
+            margin-bottom: 14px;
         }
-        .terminal-header span { color: var(--accent-gold); }
+        .terminal-header span { color: var(--cream-bright); }
+        .section-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            letter-spacing: 0.18em;
+            color: var(--cream-dim);
+            margin-bottom: 10px;
+        }
+        .section-label::after {
+            content: "";
+            flex: 1;
+            border-top: 1px solid var(--cream-dim);
+        }
         .terminal-output {
             flex-grow: 1;
             overflow-y: auto;
-            margin-bottom: 15px;
+            margin-bottom: 14px;
             padding-right: 10px;
             white-space: pre-wrap;
-            line-height: 1.5;
-            text-shadow: 0 0 8px rgba(0, 255, 102, 0.4);
+            line-height: 1.55;
+            font-size: 0.95rem;
+            letter-spacing: 0.04em;
         }
         .terminal-input-line {
             display: flex;
             align-items: center;
-            border-top: 1px solid var(--terminal-border);
+            border-top: 1px solid var(--cream-dim);
             padding-top: 12px;
         }
         .prompt-symbol {
-            color: var(--accent-gold);
+            color: var(--cream-bright);
             margin-right: 10px;
             font-weight: bold;
-            text-shadow: 0 0 5px rgba(255, 183, 0, 0.5);
         }
-        .error-text { color: var(--alert-red); text-shadow: 0 0 8px rgba(255, 51, 51, 0.5); }
-        .success-text { color: var(--primary-glow); text-shadow: 0 0 8px rgba(0, 255, 102, 0.6); }
-        .accent-text { color: var(--accent-gold); text-shadow: 0 0 8px rgba(255, 183, 0, 0.4); }
-        .user-input-text { color: var(--input-muted); text-shadow: 0 0 6px rgba(184, 151, 66, 0.3); }
-        .info-text { color: #5ab37d; text-shadow: 0 0 5px rgba(90, 179, 125, 0.2); }
+        /* Кольори повідомлень: усе в одній палітрі, різниця — у яскравості та інверсії */
+        .accent-text { color: var(--cream-bright); }
+        .info-text { color: var(--cream); }
+        .user-input-text { color: var(--cream-faint); }
+        .success-text {
+            color: var(--cream-bright);
+            text-shadow: 0 0 6px rgba(240, 233, 216, 0.55);
+        }
+        .error-text {
+            background: var(--cream);
+            color: var(--bg-color);
+            padding: 0 6px;
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+        }
         input {
             background: transparent;
             border: none;
-            color: var(--input-muted); 
-            font-family: 'Share Tech Mono', monospace;
-            font-size: 1.1rem;
+            color: var(--cream);
+            font-family: inherit;
+            font-size: 1.05rem;
+            letter-spacing: 0.06em;
             outline: none;
             width: 100%;
-            text-shadow: 0 0 6px rgba(184, 151, 66, 0.3);
+            caret-color: var(--cream-bright);
+            caret-shape: block;
         }
-        input:disabled {
-            color: var(--alert-red);
-            text-shadow: 0 0 5px rgba(255, 51, 51, 0.5);
-            cursor: not-allowed;
-        }
+        input::placeholder { color: var(--cream-faint); }
+        input:disabled { color: var(--cream-faint); cursor: not-allowed; }
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: var(--terminal-border); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: var(--cream-faint); }
+        ::selection { background: var(--cream); color: var(--bg-color); }
     </style>
 </head>
 <body>
 
     <div class="terminal-container">
+        <div class="terminal-title">SYN / TERMINAL</div>
         <div class="terminal-header">
             <div>РАНГ: <span id="op-rank">---</span></div>
             <div>БАЛИ: <span id="op-score">---</span></div>
             <div>РОЗСЛІДУВАЧ: <span id="op-name">---</span></div>
         </div>
+        <div class="section-label">ЗАКРИТИЙ КАНАЛ</div>
 
         <div class="terminal-output" id="output"><span class="accent-text">============================================================
   ЗАКРИТИЙ КАНАЛ ЗВ'ЯЗКУ // СЕКРЕТНИЙ ТЕРМІНАЛ
@@ -197,7 +241,7 @@
                         isLocked = true;
                         inputField.disabled = true;
                         inputField.placeholder = "ТЕРМІНАЛ ЗАБЛОКОВАНО";
-                        document.querySelector('.prompt-symbol').style.color = '#ff3333';
+                        document.querySelector('.prompt-symbol').style.color = 'var(--cream-faint)';
                     }
 
                 } catch (err) {

@@ -8,7 +8,7 @@ from database import init_db
 
 app = Flask(__name__)
 
-# Автоматичне створення таблиць у базі даних при запускe
+# Автоматичне створення таблиць у базі даних при запуску
 init_db()
 
 player_manager = PlayerManager()
@@ -32,7 +32,7 @@ def handle_command():
         # Ініціалізація нової сесії підключення
         if session_id not in active_sessions:
             active_sessions[session_id] = {
-                "state": "ASK_MODE",  # ASK_MODE, ASK_USERNAME, ASK_PASSWORD, MENU, WAITING_*
+                "state": "ASK_MODE",  # ASK_MODE, ASK_USERNAME, CONFIRM_REGISTER_SWITCH, ASK_PASSWORD, MENU, WAITING_*
                 "mode": None,          # 'LOGIN' або 'REGISTER'
                 "username": "",
                 "password_attempts": 0,
@@ -65,6 +65,28 @@ def handle_command():
                     "step": "ASK_MODE"
                 })
 
+        # КРОК 1.5: Підтвердження переходу до реєстрації, якщо акаунт не знайдено
+        if state == "CONFIRM_REGISTER_SWITCH":
+            if cmd in ["1", "так", "yes", "y"]:
+                sess["mode"] = "REGISTER"
+                sess["profile"] = PlayerProfile(name=sess["username"])
+                sess["state"] = "ASK_PASSWORD"
+                return jsonify({
+                    "result": f"\n[РЕЄСТРАЦІЯ]: Створюємо новий акаунт для '{sess['username']}'.\nПридумайте та введіть новий пароль:",
+                    "step": "ASK_PASSWORD"
+                })
+            elif cmd in ["2", "ні", "no", "n"]:
+                sess["state"] = "ASK_USERNAME"
+                return jsonify({
+                    "result": "\nВведіть інше ім'я для входу:",
+                    "step": "ASK_USERNAME"
+                })
+            else:
+                return jsonify({
+                    "result": "\n[ПОМИЛКА]: Введіть 1 (Так — зареєструватися) або 2 (Ні — спробувати інше ім'я):",
+                    "step": "CONFIRM_REGISTER_SWITCH"
+                })
+
         # КРОК 2: Введення та перевірка імені
         if state == "ASK_USERNAME":
             if not cmd:
@@ -80,9 +102,11 @@ def handle_command():
 
             if sess["mode"] == "LOGIN":
                 if not user_exists:
+                    sess["username"] = cmd
+                    sess["state"] = "CONFIRM_REGISTER_SWITCH"
                     return jsonify({
-                        "result": f"\n[ПОМИЛКА ВХОДУ]: Користувача з ім'ям '{cmd}' не знайдено!\nПеревірте ім'я та спробуйте ще раз (або оновіть сторінку для реєстрації):",
-                        "step": "ASK_USERNAME"
+                        "result": f"\n[УВАГА]: Розслідувача з ім'ям '{cmd}' не знайдено у системі!\n\nБажаєте зареєструвати новий акаунт з ім'ям '{cmd}'?\n 1. Так (Зареєструватися)\n 2. Ні (Спробувати інше ім'я для входу)\n\nВведіть 1 або 2:",
+                        "step": "CONFIRM_REGISTER_SWITCH"
                     })
                 
                 real_name = player_manager.get_real_name(cmd)
@@ -119,7 +143,7 @@ def handle_command():
                 profile.password_hash = hash_password(cmd)
                 player_manager.save_profile(profile)
 
-                # ДЛЯ НОВОГО КОРИСТУВАЧА ЗАВЖДИ БЕРЕМО СПРАВУ 001 З JSON
+                # ДЛЯ НОВОГО КОРИСТУВАЧА ЗАВЖДИ БЕРЕМО СПРАВУ 001З JSON
                 case_data = case_loader.get_starter_case(profile.solved_count)
 
                 sess["session"] = GameSession(profile, case_data)
@@ -137,7 +161,6 @@ def handle_command():
                 if profile.password_hash == hash_password(cmd):
                     sess["password_attempts"] = 0
 
-                    # ЯКЩО solved_count == 0 -> СПРАВА 001 З JSON, ІНАКШЕ -> ГЕНЕРУЄМО НОВУ
                     if profile.solved_count == 0:
                         case_data = case_loader.get_starter_case(0)
                     else:
@@ -210,10 +233,8 @@ def handle_command():
                     profile.total_score += 10
                     profile.current_level = profile.get_rank()
                     
-                    # Збереження оновленого профілю в БД
                     player_manager.save_profile(profile)
                     
-                    # Лише ПІСЛЯ першої розв'язаної справи (solved_count >= 1) переходимо до процедурної генерації
                     sess["session"] = GameSession(profile, generate_case(profile.get_rank()))
                     
                     response_text = (

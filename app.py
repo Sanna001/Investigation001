@@ -68,7 +68,7 @@ def handle_command():
                 sess["profile"] = PlayerProfile(name=sess["username"])
                 sess["state"] = "ASK_PASSWORD"
                 return jsonify({
-                    "result": f"\n[РЕЄСТРАЦІЯ]: Створюємо новий акаунт для '{sess['username']}'.\nПридумайте та введіть новий пароль:",
+                    "result": f"\n[РЕЄСТРАЦІЯ]: Створюємо новий акаунт для '{sess['username']}'.\nПридумайте пароль:",
                     "step": "ASK_PASSWORD"
                 })
             elif cmd in ["2", "ні", "no", "n"]:
@@ -100,7 +100,7 @@ def handle_command():
                     sess["username"] = cmd
                     sess["state"] = "CONFIRM_REGISTER_SWITCH"
                     return jsonify({
-                        "result": f"\n[УВАГА]: Розслідувача з ім'ям '{cmd}' не знайдено у системі!\n\nБажаєте зареєструвати новий акаунт з ім'ям '{cmd}'?\n 1. Так (Зареєструватися)\n 2. Ні (Спробувати інше ім'я для входу)\n\nВведіть 1 або 2:",
+                        "result": f"\n[УВАГА]: Розслідувача з ім'ям '{cmd}' не знайдено у системі!\n\nБажаєте зареєструвати новий акаунт з ім'ям '{cmd}'?\n 1. Так \n 2. Ні (Спробувати інше ім'я для входу)\n\nВведіть 1 або 2:",
                         "step": "CONFIRM_REGISTER_SWITCH"
                     })
                 
@@ -125,7 +125,7 @@ def handle_command():
                 sess["profile"] = PlayerProfile(name=cmd)
                 sess["state"] = "ASK_PASSWORD"
                 return jsonify({
-                    "result": f"\n[РЕЄСТРАЦІЯ]: Ім'я '{cmd}' вільне.\nПридумайте та введіть новий пароль:",
+                    "result": f"\n[РЕЄСТРАЦІЯ]: Ім'я '{cmd}' вільне.\nПридумайте пароль:",
                     "step": "ASK_PASSWORD"
                 })
 
@@ -205,7 +205,7 @@ def handle_command():
 
             sess["session"] = GameSession(profile, generate_case(selected_lvl))
             sess["last_tree"] = None
-            response_text += f"\n[Нова справа успішно згенерована]: Рівень [{selected_lvl}].\nВведіть 'start' для перегляду меню."
+            response_text += f"\n[Нова справа]: Рівень [{selected_lvl}].\nВведіть 'start' для перегляду меню."
 
             return jsonify({
                 "result": response_text,
@@ -233,7 +233,7 @@ def handle_command():
                         f"\n[УСПІХ!]: Гіпотезу успішно ДОВЕДЕНО методом резолюції!\n"
                         f"Оновлені бали: {profile.total_score} | Ранг: {profile.get_rank()}\n"
                         f"Дані збережено. Нову справу підготовлено!\n"
-                        f"Введіть 'start' у головному меню, щоб перейти до нової справи."
+                        f"Введіть 'menu', щоб перейти до нової справи або закінчити сесію."
                     )
                 else:
                     session.attempts_left -= 1
@@ -257,12 +257,12 @@ def handle_command():
                 f" МЕНЮ РОЗСЛІДУВАННЯ (Розслідувач: {profile.name} | Ранг: {rank} | Бали: {profile.total_score}):\n"
                 f"========================================\n"
                 f" Поточна справа: {session.case_data['title']}\n"
-                f" 1. Переглянути опис та легенду справи\n"
-                f" 2. Переглянути аксіоми (Базу Знань)\n"
-                f" 3. Перевірити гіпотезу (зробити дедуктивний хід)\n"
+                f" 1. Переглянути легенду справи\n"
+                f" 2. Переглянути базу знань\n"
+                f" 3. Перевірити гіпотезу\n"
                 f" 4. Показати дерево виведення останнього доведення\n"
                 f"{menu_item_5}\n"
-                f" 6. Вийти / Зберегти\n"
+                f" 6. Вийти та зберегти\n"
                 f"----------------------------------------\n"
                 f"Оберіть пункт меню (1-6):"
             )
@@ -293,7 +293,7 @@ def handle_command():
                 response_text = f"\n--- ДЕРЕВО ВИВЕДЕННЯ ---\n{steps_str}"
         elif cmd == "5":
             if rank == "Junior Investigator":
-                response_text = f"\n[ДОСТУП ОБМЕЖЕНО]: Ранг Junior Investigator не дозволяє обирати рівень.\nВведіть 'start' для повернення до меню."
+                response_text = f"\n[ДОСТУП ОБМЕЖЕНО]: Ранг Junior Investigator не дозволяє обирати рівень.\nВведіть 'menu' для повернення до меню."
             elif rank == "Middle Investigator":
                 sess["state"] = "WAITING_LEVEL_CHOICE"
                 response_text = "\n--- ОБЕРІТЬ РІВЕНЬ СКЛАДНОСТІ СПРАВИ ---\n 1. Junior Investigator\n 2. Middle Investigator\nВведіть номер рівня (1-2):"
@@ -305,7 +305,7 @@ def handle_command():
             del active_sessions[session_id]
             response_text = f"\nПрофіль {profile.name} збережено. Сеанс завершено. Можете закрити вкладку або оновити сторінку."
         else:
-            response_text = f"\n[Система]: Невідома команда. Введіть 'start' для виклику головного меню."
+            response_text = f"\n[Система]: Невідома команда. Введіть 'menu' для виклику головного меню."
 
         return jsonify({
             "result": response_text,

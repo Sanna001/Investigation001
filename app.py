@@ -250,7 +250,7 @@ def handle_command():
                 "name": profile.name
             })
 
-        if cmd.lower() in ["start", "меню"]:
+        if cmd.lower() in ["start", "menu"]:
             menu_item_5 = " 5. [Заблоковано] Обрати рівень складності (доступно з Middle)" if rank == "Junior Investigator" else " 5. Обрати рівень складності справи"
             response_text = (
                 f"\n========================================\n"

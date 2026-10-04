@@ -3,6 +3,7 @@ from logic.parser import parse_formula
 from logic.cnf import formula_to_clauses
 from logic.models import Clause
 from logic.resolution import prove, DeductionTree
+from solver import generate_step_by_step_solution
 
 class GameSession:
     def __init__(self, profile, case_data: Dict[str, Any]):

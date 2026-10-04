@@ -1,95 +1,92 @@
-def evaluate_step_by_step(axioms_strs, legend):
+# solver.py
+from logic.parser import parse_formula
+from logic.cnf import formula_to_clauses
+from logic.models import Clause, Literal
+
+def eval_literal(lit: Literal, model: dict):
+    """Повертає значення літералу (1, 0 або None, якщо невідомо)."""
+    if lit.name not in model:
+        return None
+    val = model[lit.name]
+    return (1 - val) if lit.negated else val
+
+def evaluate_case(axioms_strs, legend):
     """
-    Алгоритм покрокового розв'язання бази знань.
-    Визначає значення змінних (1 або 0) та генерує покроковий лог.
+    Універсальний алгоритм покрокового розв'язання (Unit Propagation).
+    Працює з будь-якими формами аксіом за допомогою КНФ!
     """
-    vars_set = set(legend.keys())
-    values = {}
-    steps = []
-    remaining_axioms = list(axioms_strs)
+    # 1. Парсимо всі аксіоми у клаузи (диз'юнкції)
+    clauses = []
+    for ax_str in axioms_strs:
+        parsed = parse_formula(ax_str)
+        cls_set = formula_to_clauses(parsed)
+        for c in cls_set:
+            clauses.append((c, ax_str))
+
+    model = {}  # Зберігає знайдені значення змінних: 'A': 1, 'B': 0 тощо.
+    steps = []  # Зберігає текстові кроки виведення
 
     changed = True
     while changed:
         changed = False
-        
-        #  Пошук одиничних літералів 
-        for ax in list(remaining_axioms):
-            ax_clean = ax.replace(" ", "").replace("(", "").replace(")", "")
-            
-            if ax_clean.startswith("~") and ax_clean[1:] in vars_set:
-                var = ax_clean[1:]
-                if var not in values:
-                    values[var] = 0
-                    steps.append(f" ~{var}=1 -> {var}=0")
-                    remaining_axioms.remove(ax)
-                    changed = True
-            elif ax_clean in vars_set:
-                var = ax_clean
-                if var not in values:
-                    values[var] = 1
-                    steps.append(f" {var}=1")
-                    remaining_axioms.remove(ax)
-                    changed = True
 
-        # 2. Обробка диз'юнкцій (A v B) та імплікацій (A -> B)
-        for ax in list(remaining_axioms):
-            if "v" in ax:
-                parts = [p.strip(" ()") for p in ax.split("v")]
-                for i, p in enumerate(parts):
-                    other_p = parts[1 - i]
-                    
-                    p_is_false = False
-                    if p.startswith("~") and values.get(p[1:]) == 1:
-                        p_is_false = True
-                    elif not p.startswith("~") and values.get(p) == 0:
-                        p_is_false = True
+        for clause, orig_ax in clauses:
+            # Оцінюємо стан літералів у цій клаузі
+            lits = list(clause.literals)
+            unknown_lits = []
+            clause_is_satisfied = False
 
-                    if p_is_false:
-                        target_var = other_p.lstrip("~")
-                        is_neg = other_p.startswith("~")
-                        val = 0 if is_neg else 1
-                        
-                        if target_var not in values:
-                            values[target_var] = val
-                            steps.append(f"({ax})=1 -> if {p}=0 then {other_p} has to be 1 -> {other_p}=1")
-                            remaining_axioms.remove(ax)
-                            changed = True
-                            break
+            for lit in lits:
+                val = eval_literal(lit, model)
+                if val == 1:
+                    clause_is_satisfied = True
+                    break
+                elif val is None:
+                    unknown_lits.append(lit)
 
-            elif "->" in ax:
-                left, right = [p.strip(" ()") for p in ax.split("->")]
-                left_var = left.lstrip("~")
-                left_is_neg = left.startswith("~")
-                left_is_true = (values.get(left_var) == 0 if left_is_neg else values.get(left_var) == 1)
+            # Якщо клауза вже істинна, пропускаємо її
+            if clause_is_satisfied:
+                continue
 
-                if left_is_true:
-                    right_var = right.lstrip("~")
-                    right_is_neg = right.startswith("~")
-                    val = 0 if right_is_neg else 1
+            # Якщо залишився РІВНО ОДИН невідомий літерал (решта хибні)
+            if len(unknown_lits) == 1:
+                target_lit = unknown_lits[0]
+                # Щоб вся клауза була істинною, цей літерал МАЄ бути 1
+                var_name = target_lit.name
+                required_var_val = 0 if target_lit.negated else 1
 
-                    if right_var not in values:
-                        values[right_var] = val
-                        steps.append(f"({ax})=1 if {left}=1 then {right} cannot be 0, -> {right}=1")
-                        if right_is_neg:
-                            steps.append(f" {right}=1 -> {right_var}=0")
-                        remaining_axioms.remove(ax)
-                        changed = True
+                model[var_name] = required_var_val
+                changed = True
 
-    return steps, values
+                # Формуємо красивий текстовий крок
+                false_lits_info = []
+                for lit in lits:
+                    if lit != target_lit:
+                        false_lits_info.append(f"{lit}=0")
+
+                if false_lits_info:
+                    cond_str = ", ".join(false_lits_info)
+                    step_text = f"Оскільки {cond_str}, з аксіоми ({orig_ax}) слідує: {target_lit}=1 -> {var_name}={required_var_val}"
+                else:
+                    step_text = f"З аксіоми ({orig_ax}) випливає: {target_lit}=1 -> {var_name}={required_var_val}"
+
+                steps.append(step_text)
+
+    return steps, model
 
 
 def generate_step_by_step_solution(case_data: dict) -> str:
-    """Генерує фінальний текст розв'язку справи у потрібному форматі."""
+    """Генерує підсумковий звіт у вашому форматі."""
     legend_str = "\n".join([f"   {k} : {v}" for k, v in case_data['legend'].items()])
-    axioms_str = "\n".join([f"  [Аксіома {i}]: ({ax})" for i, ax in enumerate(case_data['axioms'], 1)])
+    axioms_str = "\n".join([f"  [Аксіома {i}]: {ax}" for i, ax in enumerate(case_data['axioms'], 1)])
 
-    steps, values = evaluate_step_by_step(case_data['axioms'], case_data['legend'])
-    
-    target = case_data.get("target_hypothesis", "V")
+    steps, model = evaluate_case(case_data['axioms'], case_data['legend'])
+
+    target = case_data.get("target_hypothesis", "B")
     target_var = target.lstrip("~")
-    target_val = values.get(target_var, 0)
-    
-    steps_formatted = "\n".join(steps)
+    target_val = model.get(target_var, 0)
+
+    steps_formatted = "\n".join(f" {s}" for s in steps)
     ans_bool = "true" if target_val == 1 else "false"
     answer_str = f"Answer: {target_var}={target_val} means {target_var} is {ans_bool} -> {target}"
 

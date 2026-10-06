@@ -6,6 +6,7 @@ from cases import CaseLoader
 from game import GameSession
 from case_generator import generate_case
 from database import init_db
+from solver import generate_step_by_step_solution
 
 app = Flask(__name__)
 
@@ -16,6 +17,55 @@ case_loader = CaseLoader()
 
 active_sessions = {}
 locked_usernames = set()
+
+SOLUTION_COST = 10
+
+
+def build_menu(profile: PlayerProfile, session: GameSession) -> str:
+    rank = profile.get_rank()
+    menu_item_6 = (
+        " 6. [Заблоковано] Обрати рівень складності (доступно з Middle)"
+        if rank == "Junior Investigator"
+        else " 6. Обрати рівень складності справи"
+    )
+    return (
+        f"\n========================================\n"
+        f" МЕНЮ РОЗСЛІДУВАННЯ (Розслідувач: {profile.name} | Ранг: {rank} | Бали: {profile.total_score}):\n"
+        f"========================================\n"
+        f" Поточна справа: {session.case_data['title']}\n"
+        f" 1. Переглянути легенду справи\n"
+        f" 2. Переглянути базу знань\n"
+        f" 3. Перевірити гіпотезу\n"
+        f" 4. Купити покрокове розв'язання (Коштує: {SOLUTION_COST} балів)\n"
+        f" 5. Показати дерево виведення останнього доведення\n"
+        f"{menu_item_6}\n"
+        f" 7. Вийти та зберегти\n"
+        f"----------------------------------------\n"
+        f"Оберіть пункт меню (1-7):"
+    )
+
+
+def do_purchase(profile: PlayerProfile, session: GameSession) -> str:
+    """Списує бали, зберігає профіль і повертає текст розв'язку."""
+    profile.total_score -= SOLUTION_COST
+    profile.current_level = profile.get_rank()
+    player_manager.save_profile(profile)
+    session.solution_text = generate_step_by_step_solution(session.case_data)
+    return (
+        f"\n[УСПІХ!]: Списано {SOLUTION_COST} балів. "
+        f"Залишок: {profile.total_score} | Ранг: {profile.get_rank()}\n\n"
+        + session.solution_text
+    )
+
+
+def player_reply(text: str, profile: PlayerProfile):
+    return jsonify({
+        "result": text,
+        "rank": profile.get_rank(),
+        "score": profile.total_score,
+        "name": profile.name
+    })
+
 
 @app.route("/")
 def index():
@@ -30,8 +80,8 @@ def handle_command():
 
         if session_id not in active_sessions:
             active_sessions[session_id] = {
-                "state": "ASK_MODE",  
-                "mode": None,          
+                "state": "ASK_MODE",
+                "mode": None,
                 "username": "",
                 "password_attempts": 0,
                 "profile": None,
@@ -103,7 +153,7 @@ def handle_command():
                         "result": f"\n[УВАГА]: Розслідувача з ім'ям '{cmd}' не знайдено у системі!\n\nБажаєте зареєструвати новий акаунт з ім'ям '{cmd}'?\n 1. Так \n 2. Ні (Спробувати інше ім'я для входу)\n\nВведіть 1 або 2:",
                         "step": "CONFIRM_REGISTER_SWITCH"
                     })
-                
+
                 real_name = player_manager.get_real_name(cmd)
                 sess["username"] = real_name
                 sess["profile"] = player_manager.load_profile(real_name)
@@ -120,7 +170,7 @@ def handle_command():
                         "result": f"\n[ПОМИЛКА РЕЄСТРАЦІЇ]: Ім'я '{real_name}' вже зайняте іншим розслідувачем!\nВведіть інше бажане ім'я:",
                         "step": "ASK_USERNAME"
                     })
-                
+
                 sess["username"] = cmd
                 sess["profile"] = PlayerProfile(name=cmd)
                 sess["state"] = "ASK_PASSWORD"
@@ -191,6 +241,20 @@ def handle_command():
         rank = profile.get_rank()
         response_text = ""
 
+        if state == "WAITING_BUY_CONFIRM":
+            if cmd.lower() in ["1", "так", "yes", "y"]:
+                sess["state"] = "MENU"
+                if profile.total_score < SOLUTION_COST:
+                    response_text = f"\n[ВІДМОВА]: Недостатньо балів. Потрібно {SOLUTION_COST}, у вас {profile.total_score}."
+                else:
+                    response_text = do_purchase(profile, session)
+            elif cmd.lower() in ["2", "ні", "no", "n"]:
+                sess["state"] = "MENU"
+                response_text = "\nПокупку скасовано. Бали та ранг не змінено.\n" + build_menu(profile, session)
+            else:
+                response_text = "\n[ПОМИЛКА]: Введіть 1 (купити) або 2 (скасувати):"
+            return player_reply(response_text, profile)
+
         if state == "WAITING_LEVEL_CHOICE":
             sess["state"] = "MENU"
             selected_lvl = "Junior Investigator"
@@ -207,28 +271,23 @@ def handle_command():
             sess["last_tree"] = None
             response_text += f"\n[Нова справа]: Рівень [{selected_lvl}].\nВведіть 'start' для перегляду меню."
 
-            return jsonify({
-                "result": response_text,
-                "rank": profile.get_rank(),
-                "score": profile.total_score,
-                "name": profile.name
-            })
+            return player_reply(response_text, profile)
 
         if state == "WAITING_HYPOTHESIS":
             sess["state"] = "MENU"
             try:
                 tree = session.verify_hypothesis(cmd)
                 sess["last_tree"] = tree
-                
+
                 if tree.status == "PROVED":
                     profile.solved_count += 1
                     profile.total_score += 10
                     profile.current_level = profile.get_rank()
-                    
+
                     player_manager.save_profile(profile)
-                    
+
                     sess["session"] = GameSession(profile, generate_case(profile.get_rank()))
-                    
+
                     response_text = (
                         f"\n[УСПІХ!]: Гіпотезу успішно ДОВЕДЕНО методом резолюції!\n"
                         f"Оновлені бали: {profile.total_score} | Ранг: {profile.get_rank()}\n"
@@ -242,31 +301,11 @@ def handle_command():
                         response_text += "\n[УВАГА]: Вичерпано ліміт спроб у цій справі!"
             except Exception as e:
                 response_text = f"\n[ПОМИЛКА ПАРСИНГУ/ЛОГІКИ]: {e}"
-            
-            return jsonify({
-                "result": response_text,
-                "rank": profile.get_rank(),
-                "score": profile.total_score,
-                "name": profile.name
-            })
+
+            return player_reply(response_text, profile)
 
         if cmd.lower() in ["start", "menu"]:
-            menu_item_6 = " 6. [Заблоковано] Обрати рівень складності (доступно з Middle)" if rank == "Junior Investigator" else " 6. Обрати рівень складності справи"
-            response_text = (
-                f"\n========================================\n"
-                f" МЕНЮ РОЗСЛІДУВАННЯ (Розслідувач: {profile.name} | Ранг: {rank} | Бали: {profile.total_score}):\n"
-                f"========================================\n"
-                f" Поточна справа: {session.case_data['title']}\n"
-                f" 1. Переглянути легенду справи\n"
-                f" 2. Переглянути базу знань\n"
-                f" 3. Перевірити гіпотезу\n"
-                f" 4. Купити покрокове розв'язання (Коштує: 10 балів)\n"
-                f" 5. Показати дерево виведення останнього доведення\n"
-                f"{menu_item_6}\n"
-                f" 7. Вийти та зберегти\n"
-                f"----------------------------------------\n"
-                f"Оберіть пункт меню (1-7):"
-            )
+            response_text = build_menu(profile, session)
         elif cmd == "1":
             c = session.case_data
             legend_str = "\n".join([f"   {k} : {v}" for k, v in c['legend'].items()])
@@ -286,13 +325,35 @@ def handle_command():
             sess["state"] = "WAITING_HYPOTHESIS"
             response_text = f"\nСпроб залишилось у цій сесії: {session.attempts_left}\nВведіть гіпотезу для перевірки (напр. ~V або V):"
         elif cmd == "4":
+            if getattr(session, "solution_text", None):
+                response_text = "\n[Інформація]: Ви вже купили розв'язок цієї справи.\n" + session.solution_text
+            elif profile.total_score < SOLUTION_COST:
+                response_text = f"\n[ВІДМОВА]: Недостатньо балів. Потрібно {SOLUTION_COST}, у вас {profile.total_score}."
+            else:
+                new_rank = PlayerProfile(
+                    name=profile.name,
+                    total_score=profile.total_score - SOLUTION_COST
+                ).get_rank()
+                if new_rank != rank:
+                    sess["state"] = "WAITING_BUY_CONFIRM"
+                    response_text = (
+                        f"\n[ПОПЕРЕДЖЕННЯ]: Після списання {SOLUTION_COST} балів ваш ранг знизиться: "
+                        f"{rank} -> {new_rank}.\n"
+                        f"Ви впевнені, що хочете купити розв'язок?\n"
+                        f" 1. Так, купити\n"
+                        f" 2. Ні, спробую самостійно\n"
+                        f"Введіть 1 або 2:"
+                    )
+                else:
+                    response_text = do_purchase(profile, session)
+        elif cmd == "5":
             tree = sess.get("last_tree")
             if not tree or not tree.steps:
                 response_text = "\n[Інформація]: Спочатку перевірте хоча б одну гіпотезу."
             else:
                 steps_str = "\n".join([f" Крок {idx}: {s.parent1}  +  {s.parent2}  -->  {s.result_clause}" for idx, s in enumerate(tree.steps, 1)])
                 response_text = f"\n--- ДЕРЕВО ВИВЕДЕННЯ ---\n{steps_str}"
-        elif cmd == "5":
+        elif cmd == "6":
             if rank == "Junior Investigator":
                 response_text = f"\n[ДОСТУП ОБМЕЖЕНО]: Ранг Junior Investigator не дозволяє обирати рівень.\nВведіть 'menu' для повернення до меню."
             elif rank == "Middle Investigator":
@@ -301,19 +362,14 @@ def handle_command():
             elif rank == "Senior Investigator":
                 sess["state"] = "WAITING_LEVEL_CHOICE"
                 response_text = "\n--- ОБЕРІТЬ РІВЕНЬ СКЛАДНОСТІ СПРАВИ ---\n 1. Junior Investigator\n 2. Middle Investigator\n 3. Senior Investigator\nВведіть номер рівня (1-3):"
-        elif cmd == "6":
+        elif cmd == "7":
             player_manager.save_profile(profile)
             del active_sessions[session_id]
             response_text = f"\nПрофіль {profile.name} збережено. Сеанс завершено. Можете закрити вкладку або оновити сторінку."
         else:
             response_text = f"\n[Система]: Невідома команда. Введіть 'menu' для виклику головного меню."
 
-        return jsonify({
-            "result": response_text,
-            "rank": profile.get_rank(),
-            "score": profile.total_score,
-            "name": profile.name
-        })
+        return player_reply(response_text, profile)
 
     except Exception as err:
         return jsonify({"result": f"\n[ПОМИЛКА СЕРВЕРА]: {str(err)}"}), 500
@@ -333,7 +389,7 @@ def list_users():
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port)
